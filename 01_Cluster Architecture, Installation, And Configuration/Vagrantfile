@@ -1,0 +1,39 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+
+    machines = ["control", "worker1", "worker2"]
+
+    machines.each do |machine_name|
+      config.vm.define machine_name do |machine|
+        machine.vm.box = "bento/ubuntu-20.04-arm64"
+        machine.vm.hostname = "#{machine_name}"
+        machine.vm.network "public_network", type: "dhcp"
+
+        machine.vm.provider :vmware_desktop do |vmware|
+          vmware.vmx["ethernet0.pcislotnumber"] = "160"
+        end
+
+        machine.vm.provision "shell", inline: <<-SHELL
+        # Docker
+          sudo apt-get -y update
+          sudo apt install net-tools -y
+          sudo apt-get install -y docker.io
+          sudo usermod -aG docker $USER
+          sudo systemctl restart docker
+        # Swap off
+          sudo swapoff -a
+          sudo sed -i '/swap/s/^/#/' /etc/fstab
+        # Kubeadm
+          sudo apt-get install -y apt-transport-https ca-certificates curl gpg
+          sudo mkdir -m 755 /etc/apt/keyrings
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+          sudo apt-get update
+          sudo apt-get install -y kubelet kubeadm kubectl
+          sudo apt-mark hold kubelet kubeadm kubectl
+        SHELL
+      end
+  end
+end
